@@ -18,7 +18,7 @@ const chess = new Chess();
 let players = {
 
 }
-let currentPlayer = "W"
+let currentPlayer = "w"
 
 app.set("view engine", "ejs");
 app.use(express.static(path.join(__dirname, "public")));
@@ -40,6 +40,52 @@ io.on("connection", function (uniqueSocket) { // "connection" is just a name of 
         // To send the data to all users except Alice himself: Broadcasting: 
         // io.emit("filtered-frontend-data")
     })
+    // uniqueSocket.on("disconnect", function () {
+    //     console.log("ws disconnected - from server");
+    // })
+    
+    if (!players.white) {
+        players.white = uniqueSocket.id
+        uniqueSocket.emit("playerRole", "w")
+    } else if (!players.black) {
+        players.black = uniqueSocket.id
+        uniqueSocket.emit("playerRole", "b")
+    } else {
+        uniqueSocket.emit("spectatorRole")
+    }
+
+    uniqueSocket.on("disconnect", function () {
+        if (uniqueSocket.id === players.white) {
+            delete players.white
+        } else if (uniqueSocket.id === players.black) {
+            delete players.black
+        }
+    })
+
+    uniqueSocket.on("move", (move) => {
+        try {
+            if (chess.turn() === "w" && uniqueSocket.id !== players.white) {
+                return
+            }
+            if (chess.turn() === "b" && uniqueSocket.id !== players.black) {
+                return
+            }
+            
+            const result = chess.move(move)
+            if (result) {
+                currentPlayer = chess.turn();
+                io.emit("move", move);
+                io.emit("boardState", chess.fen())
+            } else {
+                console.log("invalid move", move);
+                uniqueSocket.emit("invalidMove", move )
+            }
+        } catch (error) {
+            console.log(error);
+            uniqueSocket.emit("invalid move: ", move);
+        }
+    })
+
 })
 
 // the entry point for the user is "server" not "app"
